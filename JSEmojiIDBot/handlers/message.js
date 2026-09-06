@@ -166,6 +166,7 @@ export default async function (message) {
       chat_id: chatId,
       parse_mode: 'HTML',
       reply_to_message_id: replyToId,
+      disable_web_page_preview: true,
       text:
         `✨ <b>Custom Emoji ID Bot</b> ✨\n\n` +
         `${EMOJI_WAVE} <b>Welcome, ${esc(from?.first_name ?? 'Friend')}!</b>\n\n` +
