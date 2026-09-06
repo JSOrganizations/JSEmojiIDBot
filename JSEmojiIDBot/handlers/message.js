@@ -1,6 +1,3 @@
-// handlers/message.js — Custom Emoji ID Extractor Bot
-// Features: emoji extraction, user tracking, admin panel (/stats, /export)
-
 import { api, db, InputFile } from 'sdk';
 import { users } from 'schema';
 import { eq, desc, sql } from 'sdk/db';
@@ -11,11 +8,9 @@ const BTN_NAME_ID           = 'ID';
 const BTN_NAME_BUTTON_CODE  = 'Button Code';
 const BTN_NAME_CAPTION_CODE = 'Caption Code';
 
-// ── Custom Emoji constants ───────────────────────────────────────────────────
 const EMOJI_WAVE  = `<tg-emoji emoji-id="6079974060907838216">👋</tg-emoji>`;
 const EMOJI_CROSS = `<tg-emoji emoji-id="6100670215522094562">❌</tg-emoji>`;
 
-// ── HTML escape helper ───────────────────────────────────────────────────────
 function esc(str) {
   return String(str ?? '')
     .replace(/&/g, '&amp;')
@@ -23,12 +18,10 @@ function esc(str) {
     .replace(/>/g, '&gt;');
 }
 
-// ── Monospace table column helper ────────────────────────────────────────────
 function col(s, w) {
   return String(s ?? '—').padEnd(w).slice(0, w);
 }
 
-// ── Save / update user in DB on every interaction ───────────────────────────
 async function upsertUser(from) {
   if (!from || from.is_bot) return;
   try {
@@ -58,16 +51,13 @@ async function upsertUser(from) {
   }
 }
 
-// ── Admin: /stats ─────────────────────────────────────────────────────────────
 async function sendStats(chatId) {
   try {
-    // Total & premium counts using raw sql for reliability
     const totalRow   = await db.get(sql`SELECT COUNT(*) as c FROM users`);
     const premiumRow = await db.get(sql`SELECT COUNT(*) as c FROM users WHERE is_premium = 1`);
     const totalUsers   = totalRow?.c  ?? 0;
     const premiumUsers = premiumRow?.c ?? 0;
 
-    // Language breakdown
     const langRows = await db.all(sql`
       SELECT language_code as lang, COUNT(*) as cnt
       FROM users
@@ -75,7 +65,6 @@ async function sendStats(chatId) {
       ORDER BY cnt DESC
     `);
 
-    // Top languages (≥10) or top 10
     const topLangs = langRows.filter(r => r.cnt >= 10).length > 0
       ? langRows.filter(r => r.cnt >= 10)
       : langRows.slice(0, 10);
@@ -110,7 +99,6 @@ async function sendStats(chatId) {
   }
 }
 
-// ── Admin: /export ─────────────────────────────────────────────────────────────
 async function sendExport(chatId) {
   try {
     const allUsers = await db.all(sql`
@@ -135,7 +123,6 @@ async function sendExport(chatId) {
       return;
     }
 
-    // Build JSON and wrap in InputFile
     const payload = {
       exportedAt: new Date().toISOString(),
       totalUsers: allUsers.length,
@@ -165,7 +152,6 @@ async function sendExport(chatId) {
   }
 }
 
-// ── Main handler ──────────────────────────────────────────────────────────────
 export default async function (message) {
   const chatId    = message.chat.id;
   const from      = message.from;
@@ -173,10 +159,8 @@ export default async function (message) {
   const text      = message.text ?? null;
   const isAdmin   = from?.id === ADMIN_ID;
 
-  // Track every user
   await upsertUser(from);
 
-  // ── /start ──────────────────────────────────────────────────────────────────
   if (text === '/start' || text === '/test') {
     await api.sendMessage({
       chat_id: chatId,
@@ -193,7 +177,6 @@ export default async function (message) {
     return;
   }
 
-  // ── Admin commands ──────────────────────────────────────────────────────────
   if (isAdmin) {
     if (text === '/stats') {
       await sendStats(chatId);
@@ -205,7 +188,6 @@ export default async function (message) {
     }
   }
 
-  // ── No text (photo, sticker, etc.) ─────────────────────────────────────────
   if (!text) {
     await api.sendMessage({
       chat_id: chatId,
@@ -216,7 +198,6 @@ export default async function (message) {
     return;
   }
 
-  // ── Collect custom emoji entity IDs ────────────────────────────────────────
   const entities       = message.entities ?? [];
   const customEmojiIds = [];
 
@@ -239,7 +220,6 @@ export default async function (message) {
     return;
   }
 
-  // ── Fetch sticker metadata & build result ───────────────────────────────────
   try {
     let stickers = null;
     try {
@@ -259,7 +239,7 @@ export default async function (message) {
       const tgEmojiTag     = `<tg-emoji emoji-id="${id}">${emoji}</tg-emoji>`;
       const btnCode        = `"icon_custom_emoji_id": "${id}"`;
       const captionCode    = `<tg-emoji emoji-id="${id}">${emoji}</tg-emoji>`;
-      const captionCodeEsc = esc(captionCode);  // escapes < > for inside <code>
+      const captionCodeEsc = esc(captionCode);
 
       resultText +=
         `<blockquote>` +
