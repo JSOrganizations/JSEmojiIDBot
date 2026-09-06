@@ -171,8 +171,9 @@ export default async function (message) {
         `${EMOJI_WAVE} <b>Welcome, ${esc(from?.first_name ?? 'Friend')}!</b>\n\n` +
         `📌 <b>What I can do:</b>\n` +
         `• Send any message with <b>Premium Custom Emojis</b>\n` +
+        `• Or send a <b>Premium Emoji Pack Link</b> (e.g. <code>t.me/addemoji/packname</code>)\n` +
         `• I'll extract each emoji's <b>ID</b>, <b>Button Code</b> &amp; <b>Caption Code</b>\n\n` +
-        `💡 <i>Just forward or type a message with custom emojis!</i>\n\n` +
+        `💡 <i>Just forward emojis or send a pack link!</i>\n\n` +
         `☁️ <i>Hosted on <a href="https://core.telegram.org/bots/serverless">Telegram Serverless</a> • <a href="https://github.com/JSOrganizations/JSEmojiIDBot">Open Source</a></i>`,
     });
     return;
@@ -314,7 +315,7 @@ export default async function (message) {
       reply_to_message_id: replyToId,
       text:
         `${EMOJI_CROSS} No <b>Custom Emojis</b> found in your message.\n\n` +
-        `Please send a message containing premium custom emojis.`,
+        `Please send a message containing premium custom emojis, or send an emoji pack link.`,
     });
     return;
   }

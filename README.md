@@ -10,9 +10,9 @@ A lightweight, serverless Telegram bot that extracts **Premium Custom Emoji IDs*
 
 ## ✨ What Does It Do?
 
-When a user sends a message containing Telegram **Premium Custom Emojis**, the bot:
+When a user sends a message containing Telegram **Premium Custom Emojis** (or an emoji pack link like `t.me/addemoji/...`), the bot:
 
-1. Detects each custom emoji from the message entities
+1. Detects each custom emoji or fetches the entire sticker pack.
 2. Fetches metadata (the original emoji character) via `getCustomEmojiStickers`
 3. Returns a formatted list showing:
    - The rendered **Premium Emoji**
