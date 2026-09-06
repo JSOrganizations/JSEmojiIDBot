@@ -1,43 +1,228 @@
-# Custom Emoji ID Extractor Bot
+# 🤖 Custom Emoji ID Bot
 
-A Telegram bot built on the **Telegram Serverless (`tgcloud`)** platform. The bot allows users to extract the ID, button code, and caption code of any Premium Custom Emoji sent to it.
+A lightweight, serverless Telegram bot that extracts **Premium Custom Emoji IDs** and their usage codes from any message. Built entirely on [Telegram Serverless](https://core.telegram.org/bots/serverless) — no external server, no VPS, no hosting costs.
 
-## Features
-- **Emoji Extraction**: Forwards or direct messages containing custom emojis are processed to extract useful IDs and HTML snippet codes.
-- **Inline Buttons**: Returns a neat list of emojis with inline buttons for 1-tap copying of the IDs and codes.
-- **User Tracking (DB)**: Stores all interacting users in a SQLite database, tracking their `first_name`, `username`, `language_code`, premium status, and `last_active` timestamp.
-- **Admin Stats Panel**: Displays total bot statistics (total users, premium count, top languages) formatted nicely via the `/stats` command.
-- **Admin JSON Export**: Exports the complete user list as a clean JSON file via the `/export` command.
+[![Open Source](https://img.shields.io/badge/Open%20Source-MIT-green)](LICENSE)
+[![Platform](https://img.shields.io/badge/Platform-Telegram%20Serverless-blue)](https://core.telegram.org/bots/serverless)
+[![Language](https://img.shields.io/badge/Language-JavaScript%20(ES6)-yellow)](https://developer.mozilla.org/en-US/docs/Web/JavaScript)
 
-## Tech Stack
-- Platform: Telegram Serverless (`@tgcloud/bot`)
-- Database: Built-in Drizzle-like SDK (`sdk/db`)
-- API Wrapper: Built-in Native SDK (`sdk/api`)
-- Language: Modern ES6 JavaScript
+---
 
-## Commands
-### User Commands
-- `/start` or `/test` - Welcome message & bot instructions.
+## ✨ What Does It Do?
 
-### Admin Commands
-- `/stats` - View total users, premium users, and top languages.
-- `/export` - Download the database of all users as a `users_export.json` file.
+When a user sends a message containing Telegram **Premium Custom Emojis**, the bot:
 
-## Setup & Deployment
-To run or deploy this project locally, make sure you have linked it to your bot token via the `tgcloud` CLI.
+1. Detects each custom emoji from the message entities
+2. Fetches metadata (the original emoji character) via `getCustomEmojiStickers`
+3. Returns a formatted list showing:
+   - The rendered **Premium Emoji**
+   - Its **Emoji ID**
+   - Ready-to-paste **Button Code** (`icon_custom_emoji_id`)
+   - Ready-to-paste **Caption Code** (`<tg-emoji>` HTML tag)
+4. Provides **inline copy buttons** for each field
 
-```bash
-# Login to your bot
-npx tgcloud login
+---
 
-# Push code to the cloud
-npm run deploy
+## 📁 Project Structure
 
-# Migrate database (if schema changed)
-npx tgcloud migrate
-
-# Check status
-npm run status
+```
+JSEmojiIDBot/
+├── handlers/
+│   └── message.js      # Main message handler (all logic lives here)
+├── schema.js           # Database schema (users table)
+├── package.json        # Project config & scripts
+└── README.md
 ```
 
-*Developed as a clean, serverless port of a legacy Python bot.*
+> **Note:** In Telegram Serverless, each file in `handlers/` maps to a Telegram update type. `message.js` handles all incoming messages.
+
+---
+
+## 🛠️ Tech Stack
+
+| Layer | Tool |
+|---|---|
+| Runtime | Telegram Serverless (V8 Isolate) |
+| API Wrapper | Built-in `sdk/api` |
+| Database | Built-in `sdk/db` (SQLite + Drizzle-style ORM) |
+| File Upload | Built-in `InputFile` from `sdk` |
+| Language | Modern JavaScript (ES Modules) |
+
+> ⚠️ No external `npm` packages are supported on the Telegram Serverless platform. Everything must use the provided `sdk` modules or pure JavaScript.
+
+---
+
+## 🚀 Getting Started
+
+### Prerequisites
+- [Node.js](https://nodejs.org) v18+
+- A Telegram Bot Token from [@BotFather](https://t.me/BotFather)
+- The `tgcloud` CLI (installed automatically via `npx`)
+
+### 1. Clone This Repo
+
+```bash
+git clone https://github.com/JSOrganizations/JSEmojiIDBot.git
+cd JSEmojiIDBot
+npm install
+```
+
+### 2. Link Your Bot
+
+```bash
+npx tgcloud login
+```
+
+You'll be prompted to paste your bot token (e.g., `123456789:AAFxxxxxx`). This links the project to your bot.
+
+### 3. Set Your Admin ID
+
+Open `handlers/message.js` and change the `ADMIN_ID` constant to your own Telegram User ID:
+
+```js
+const ADMIN_ID = 6162684693; // ← Replace with your Telegram ID
+```
+
+> Don't know your ID? Send any message to the bot after deploying and check the console logs.
+
+### 4. Deploy
+
+```bash
+npm run deploy
+```
+
+### 5. Migrate the Database
+
+Only needed once (or whenever `schema.js` changes):
+
+```bash
+npx tgcloud migrate
+```
+
+### 6. Test It Live
+
+Send `/start` to your bot on Telegram. Then send a message containing any **Premium Custom Emoji** and the bot will respond with the extracted IDs.
+
+---
+
+## 🧱 Building Your Own Serverless Bot
+
+Want to build a different bot from scratch using the same platform? Here's the quick-start:
+
+### Create a New Project
+
+```bash
+npm create @tgcloud/bot@latest ./MyNewBot
+cd MyNewBot
+npm install
+npx tgcloud login
+```
+
+### Add a Message Handler
+
+Create `handlers/message.js`:
+
+```js
+import { api } from 'sdk';
+
+export default async function (message) {
+  await api.sendMessage({
+    chat_id: message.chat.id,
+    text: `Hello, ${message.from?.first_name}!`,
+  });
+}
+```
+
+### Use the Database
+
+Define your schema in `schema.js`:
+
+```js
+import { table, integer, text } from 'sdk/db';
+
+export const items = table('items', {
+  id:    integer('id').primaryKey(),
+  value: text('value').notNull(),
+});
+```
+
+Then use it in a handler:
+
+```js
+import { db } from 'sdk';
+import { sql } from 'sdk/db';
+import { items } from 'schema';
+
+const rows = await db.all(sql`SELECT * FROM items`);
+```
+
+### Send a File
+
+```js
+import { api, InputFile } from 'sdk';
+
+const content = new TextEncoder().encode('Hello World');
+const file    = new InputFile(content, 'hello.txt', { type: 'text/plain' });
+
+await api.sendDocument({ chat_id: chatId, document: file });
+```
+
+### Deploy & Migrate
+
+```bash
+npm run deploy          # Push code changes
+npx tgcloud migrate     # Apply DB schema changes
+npm run status          # Check deployment status
+```
+
+---
+
+## ⚙️ Available Scripts
+
+| Command | Description |
+|---|---|
+| `npm run deploy` | Push code to the Telegram Serverless cloud |
+| `npm run status` | Check current deployment status |
+| `npm run run` | Run the bot locally for testing |
+| `npx tgcloud migrate` | Apply any pending database schema changes |
+| `npx tgcloud migrate --yes` | Apply migrations without confirmation prompt |
+
+---
+
+## 👤 Admin Commands
+
+These commands only work for the user whose ID matches `ADMIN_ID` in `message.js`:
+
+| Command | Description |
+|---|---|
+| `/stats` | View total users, premium users, and top languages |
+| `/export` | Download full user database as a `users_export.json` file |
+
+---
+
+## 🗄️ Database Schema
+
+```js
+// schema.js
+users {
+  userId       INTEGER  PRIMARY KEY
+  firstName    TEXT     NOT NULL
+  username     TEXT
+  languageCode TEXT
+  isPremium    BOOLEAN  DEFAULT false
+  lastActive   INTEGER  (timestamp)
+  createdAt    INTEGER  (timestamp)
+}
+```
+
+Every user who interacts with the bot is automatically saved (or updated) in this table.
+
+---
+
+## 📄 License
+
+This project is open source under the [MIT License](LICENSE). Feel free to fork, modify, and build upon it!
+
+---
+
+*A project by [JSOrganizations](https://github.com/JSOrganizations)*
