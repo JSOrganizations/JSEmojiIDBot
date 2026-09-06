@@ -199,7 +199,6 @@ export default async function (message) {
     return;
   }
 
-  // ── Collect custom emoji entity IDs ────────────────────────────────────────
   const entities       = message.entities ?? [];
   const customEmojiIds = [];
 
@@ -210,7 +209,7 @@ export default async function (message) {
     }
   }
 
-  const stickerSetMatch = text.match(/(?:t\.me\/add(?:stickers|emoji)\/|^\/?pack\s+)([\w_]+)/i);
+  const stickerSetMatch = text.match(/(?:t\.me\/addemoji\/|^\/?pack\s+)([\w_]+)/i);
   if (stickerSetMatch && customEmojiIds.length === 0) {
     const packName = stickerSetMatch[1];
     try {
