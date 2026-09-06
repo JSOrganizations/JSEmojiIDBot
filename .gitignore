@@ -1,0 +1,13 @@
+# Ignore the workstation folder (docs, temp bots, exports)
+WorkStation/
+
+# Node modules
+node_modules/
+npm-debug.log*
+
+# ServerLess CLI state
+.tgcloud/
+
+# OS generated files
+.DS_Store
+Thumbs.db

@@ -1,0 +1,304 @@
+// handlers/message.js — Custom Emoji ID Extractor Bot
+// Features: emoji extraction, user tracking, admin panel (/stats, /export)
+
+import { api, db, InputFile } from 'sdk';
+import { users } from 'schema';
+import { eq, desc, sql } from 'sdk/db';
+
+const ADMIN_ID = 6162684693;
+
+const BTN_NAME_ID           = 'ID';
+const BTN_NAME_BUTTON_CODE  = 'Button Code';
+const BTN_NAME_CAPTION_CODE = 'Caption Code';
+
+// ── Custom Emoji constants ───────────────────────────────────────────────────
+const EMOJI_WAVE  = `<tg-emoji emoji-id="6079974060907838216">👋</tg-emoji>`;
+const EMOJI_CROSS = `<tg-emoji emoji-id="6100670215522094562">❌</tg-emoji>`;
+
+// ── HTML escape helper ───────────────────────────────────────────────────────
+function esc(str) {
+  return String(str ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+// ── Monospace table column helper ────────────────────────────────────────────
+function col(s, w) {
+  return String(s ?? '—').padEnd(w).slice(0, w);
+}
+
+// ── Save / update user in DB on every interaction ───────────────────────────
+async function upsertUser(from) {
+  if (!from || from.is_bot) return;
+  try {
+    await db.insert(users)
+      .values({
+        userId:       from.id,
+        firstName:    from.first_name ?? 'Unknown',
+        username:     from.username   ?? null,
+        languageCode: from.language_code ?? null,
+        isPremium:    from.is_premium ?? false,
+        lastActive:   new Date(),
+        createdAt:    new Date(),
+      })
+      .onConflictDoUpdate({
+        target: users.userId,
+        set: {
+          firstName:    from.first_name ?? 'Unknown',
+          username:     from.username   ?? null,
+          languageCode: from.language_code ?? null,
+          isPremium:    from.is_premium ?? false,
+          lastActive:   new Date(),
+        },
+      })
+      .run();
+  } catch (e) {
+    console.error('upsertUser error:', e.message);
+  }
+}
+
+// ── Admin: /stats ─────────────────────────────────────────────────────────────
+async function sendStats(chatId) {
+  try {
+    // Total & premium counts using raw sql for reliability
+    const totalRow   = await db.get(sql`SELECT COUNT(*) as c FROM users`);
+    const premiumRow = await db.get(sql`SELECT COUNT(*) as c FROM users WHERE is_premium = 1`);
+    const totalUsers   = totalRow?.c  ?? 0;
+    const premiumUsers = premiumRow?.c ?? 0;
+
+    // Language breakdown
+    const langRows = await db.all(sql`
+      SELECT language_code as lang, COUNT(*) as cnt
+      FROM users
+      GROUP BY language_code
+      ORDER BY cnt DESC
+    `);
+
+    // Top languages (≥10) or top 10
+    const topLangs = langRows.filter(r => r.cnt >= 10).length > 0
+      ? langRows.filter(r => r.cnt >= 10)
+      : langRows.slice(0, 10);
+
+    const div = '─'.repeat(34);
+    let table = `${div}\n`;
+    table    += `${col('#', 3)} ${col('Language', 12)} ${col('Users', 6)} ${col('%', 6)}\n`;
+    table    += `${div}\n`;
+    topLangs.forEach((r, i) => {
+      const pct = totalUsers > 0 ? ((r.cnt / totalUsers) * 100).toFixed(1) + '%' : '0%';
+      table += `${col(i + 1, 3)} ${col(r.lang ?? 'Unknown', 12)} ${col(r.cnt, 6)} ${col(pct, 6)}\n`;
+    });
+    table += div;
+
+    const heading = langRows.filter(r => r.cnt >= 10).length > 0
+      ? 'Top Languages (≥10 users)'
+      : `Top Languages (${topLangs.length} total)`;
+
+    await api.sendMessage({
+      chat_id: chatId,
+      parse_mode: 'HTML',
+      text:
+        `📊 <b>Bot Statistics</b>\n\n` +
+        `👥 <b>Total Users:</b> <code>${totalUsers}</code>\n` +
+        `✨ <b>Premium Users:</b> <code>${premiumUsers}</code>\n` +
+        `🌍 <b>Unique Languages:</b> <code>${langRows.length}</code>\n\n` +
+        `<b>${heading}:</b>\n<pre>${table}</pre>`,
+    });
+  } catch (e) {
+    console.error('sendStats error:', e.message);
+    await api.sendMessage({ chat_id: chatId, text: `⚠️ Stats error: ${esc(e.message)}`, parse_mode: 'HTML' });
+  }
+}
+
+// ── Admin: /export ─────────────────────────────────────────────────────────────
+async function sendExport(chatId) {
+  try {
+    const allUsers = await db.all(sql`
+      SELECT
+        user_id       AS userId,
+        first_name    AS firstName,
+        username,
+        language_code AS languageCode,
+        is_premium    AS isPremium,
+        datetime(last_active,  'unixepoch') AS lastActive,
+        datetime(created_at,   'unixepoch') AS createdAt
+      FROM users
+      ORDER BY last_active DESC
+    `);
+
+    if (!allUsers || allUsers.length === 0) {
+      await api.sendMessage({
+        chat_id: chatId,
+        text: `${EMOJI_CROSS} No users in database yet.`,
+        parse_mode: 'HTML',
+      });
+      return;
+    }
+
+    // Build JSON and wrap in InputFile
+    const payload = {
+      exportedAt: new Date().toISOString(),
+      totalUsers: allUsers.length,
+      users: allUsers,
+    };
+    const jsonStr = JSON.stringify(payload, null, 2);
+    const bytes   = new TextEncoder().encode(jsonStr);
+    const file    = new InputFile(bytes, 'users_export.json', { type: 'application/json' });
+
+    await api.sendDocument({
+      chat_id: chatId,
+      document: file,
+      caption:
+        `👥 <b>User Export</b>\n` +
+        `📦 Total: <code>${allUsers.length}</code> users\n` +
+        `🕐 <code>${new Date().toISOString()}</code>`,
+      parse_mode: 'HTML',
+    });
+
+  } catch (e) {
+    console.error('sendExport error:', e.message);
+    await api.sendMessage({
+      chat_id: chatId,
+      text: `⚠️ Export error: ${esc(e.message)}`,
+      parse_mode: 'HTML',
+    });
+  }
+}
+
+// ── Main handler ──────────────────────────────────────────────────────────────
+export default async function (message) {
+  const chatId    = message.chat.id;
+  const from      = message.from;
+  const replyToId = message.message_id;
+  const text      = message.text ?? null;
+  const isAdmin   = from?.id === ADMIN_ID;
+
+  // Track every user
+  await upsertUser(from);
+
+  // ── /start ──────────────────────────────────────────────────────────────────
+  if (text === '/start' || text === '/test') {
+    await api.sendMessage({
+      chat_id: chatId,
+      parse_mode: 'HTML',
+      reply_to_message_id: replyToId,
+      text:
+        `✨ <b>Custom Emoji ID Bot</b> ✨\n\n` +
+        `${EMOJI_WAVE} <b>Welcome, ${esc(from?.first_name ?? 'Friend')}!</b>\n\n` +
+        `📌 <b>What I can do:</b>\n` +
+        `• Send any message with <b>Premium Custom Emojis</b>\n` +
+        `• I'll extract each emoji's <b>ID</b>, <b>Button Code</b> &amp; <b>Caption Code</b>\n\n` +
+        `💡 <i>Just forward or type a message with custom emojis!</i>`,
+    });
+    return;
+  }
+
+  // ── Admin commands ──────────────────────────────────────────────────────────
+  if (isAdmin) {
+    if (text === '/stats') {
+      await sendStats(chatId);
+      return;
+    }
+    if (text === '/export') {
+      await sendExport(chatId);
+      return;
+    }
+  }
+
+  // ── No text (photo, sticker, etc.) ─────────────────────────────────────────
+  if (!text) {
+    await api.sendMessage({
+      chat_id: chatId,
+      parse_mode: 'HTML',
+      reply_to_message_id: replyToId,
+      text: `${EMOJI_CROSS} Please send a <b>text message</b> containing one or more Custom Emojis.`,
+    });
+    return;
+  }
+
+  // ── Collect custom emoji entity IDs ────────────────────────────────────────
+  const entities       = message.entities ?? [];
+  const customEmojiIds = [];
+
+  for (const entity of entities) {
+    if (entity.type === 'custom_emoji') {
+      const id = entity.custom_emoji_id;
+      if (id && !customEmojiIds.includes(id)) customEmojiIds.push(id);
+    }
+  }
+
+  if (customEmojiIds.length === 0) {
+    await api.sendMessage({
+      chat_id: chatId,
+      parse_mode: 'HTML',
+      reply_to_message_id: replyToId,
+      text:
+        `${EMOJI_CROSS} No <b>Custom Emojis</b> found in your message.\n\n` +
+        `Please send a message containing premium custom emojis.`,
+    });
+    return;
+  }
+
+  // ── Fetch sticker metadata & build result ───────────────────────────────────
+  try {
+    let stickers = null;
+    try {
+      stickers = await api.getCustomEmojiStickers({ custom_emoji_ids: customEmojiIds });
+    } catch (_) {}
+
+    const list = (stickers?.length > 0)
+      ? stickers.map((s, i) => ({ id: s.custom_emoji_id ?? customEmojiIds[i], emoji: s.emoji ?? '❓' }))
+      : customEmojiIds.map(id => ({ id, emoji: '❓' }));
+
+    let resultText = '✨ <b><u>Custom Emoji List</u></b> ✨\n\n';
+    const keyboard = [];
+
+    list.forEach(({ id, emoji }, i) => {
+      const idx = i + 1;
+
+      const tgEmojiTag     = `<tg-emoji emoji-id="${id}">${emoji}</tg-emoji>`;
+      const btnCode        = `"icon_custom_emoji_id": "${id}"`;
+      const captionCode    = `<tg-emoji emoji-id="${id}">${emoji}</tg-emoji>`;
+      const captionCodeEsc = esc(captionCode);  // escapes < > for inside <code>
+
+      resultText +=
+        `<blockquote>` +
+        `<b>${idx}. Custom Emoji</b>\n` +
+        `✨ <b>Premium Emoji:</b> ${tgEmojiTag}\n` +
+        `🆔 <b>ID:</b> <code>${id}</code>\n` +
+        `🔘 <b>Use in Button:</b> <code>${esc(btnCode)}</code>\n` +
+        `📝 <b>Use in Caption:</b> <code>${captionCodeEsc}</code>` +
+        `</blockquote>\n`;
+
+      keyboard.push([
+        { text: `${BTN_NAME_ID} #${idx}`,          copy_text: { text: id },          style: 'primary', icon_custom_emoji_id: id },
+        { text: `${BTN_NAME_BUTTON_CODE} #${idx}`,  copy_text: { text: btnCode },     style: 'success', icon_custom_emoji_id: id },
+        { text: `${BTN_NAME_CAPTION_CODE} #${idx}`, copy_text: { text: captionCode }, style: 'danger',  icon_custom_emoji_id: id },
+      ]);
+    });
+
+    await api.sendMessage({
+      chat_id: chatId,
+      parse_mode: 'HTML',
+      reply_markup: { inline_keyboard: keyboard },
+      reply_to_message_id: replyToId,
+      text: resultText,
+    });
+
+  } catch (e) {
+    console.error('emoji handler error:', e.message);
+    try {
+      await api.sendMessage({
+        chat_id: ADMIN_ID,
+        parse_mode: 'HTML',
+        text: `⚠️ <b>Bot Error</b>\nUser: <code>${from?.id}</code>\n<code>${esc(e.message ?? String(e))}</code>`,
+      });
+    } catch (_) {}
+    await api.sendMessage({
+      chat_id: chatId,
+      reply_to_message_id: replyToId,
+      text: `${EMOJI_CROSS} An error occurred while processing the custom emojis.`,
+      parse_mode: 'HTML',
+    });
+  }
+}
