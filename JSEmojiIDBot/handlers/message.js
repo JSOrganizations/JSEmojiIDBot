@@ -210,7 +210,6 @@ export default async function (message) {
     }
   }
 
-  // ── Handle Sticker Set Links ───────────────────────────────────────────────
   const stickerSetMatch = text.match(/(?:t\.me\/add(?:stickers|emoji)\/|^\/?pack\s+)([\w_]+)/i);
   if (stickerSetMatch && customEmojiIds.length === 0) {
     const packName = stickerSetMatch[1];
@@ -255,7 +254,6 @@ export default async function (message) {
         reply_to_message_id: replyToId,
       });
 
-      // Send chunked messages with inline buttons (max 30 emojis per message = 90 buttons)
       const chunkSize = 30;
       for (let i = 0; i < emojis.length; i += chunkSize) {
         const chunk = emojis.slice(i, i + chunkSize);
