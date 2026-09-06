@@ -253,7 +253,7 @@ export default async function (message) {
         reply_to_message_id: replyToId,
       });
 
-      const chunkSize = 30;
+      const chunkSize = 10;
       for (let i = 0; i < emojis.length; i += chunkSize) {
         const chunk = emojis.slice(i, i + chunkSize);
         let resultText = `✨ <b><u>${esc(packName)}</u></b> (Part ${Math.floor(i / chunkSize) + 1})\n\n`;
@@ -282,12 +282,17 @@ export default async function (message) {
           ]);
         });
 
-        await api.sendMessage({
-          chat_id: chatId,
-          parse_mode: 'HTML',
-          reply_markup: { inline_keyboard: keyboard },
-          text: resultText,
-        });
+        try {
+          await api.sendMessage({
+            chat_id: chatId,
+            parse_mode: 'HTML',
+            reply_markup: { inline_keyboard: keyboard },
+            text: resultText,
+          });
+        } catch (err) {
+          console.error('Chunk send error:', err.message);
+          break;
+        }
       }
       return;
 
