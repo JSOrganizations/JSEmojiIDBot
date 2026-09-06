@@ -211,7 +211,7 @@ export default async function (message) {
   }
 
   // ── Handle Sticker Set Links ───────────────────────────────────────────────
-  const stickerSetMatch = text.match(/(?:t\.me\/addstickers\/|^\/?pack\s+)([\w_]+)/i);
+  const stickerSetMatch = text.match(/(?:t\.me\/add(?:stickers|emoji)\/|^\/?pack\s+)([\w_]+)/i);
   if (stickerSetMatch && customEmojiIds.length === 0) {
     const packName = stickerSetMatch[1];
     try {
@@ -250,10 +250,48 @@ export default async function (message) {
         caption: 
           `✨ <b>Pack:</b> <code>${esc(packName)}</code>\n` +
           `📦 <b>Total Emojis:</b> ${emojis.length}\n\n` +
-          `<i>All IDs and codes are in the attached text file. For 1-tap copy buttons, just forward specific emojis to me!</i>`,
+          `<i>All IDs and codes are in the attached text file. Sending inline buttons below...</i>`,
         parse_mode: 'HTML',
         reply_to_message_id: replyToId,
       });
+
+      // Send chunked messages with inline buttons (max 30 emojis per message = 90 buttons)
+      const chunkSize = 30;
+      for (let i = 0; i < emojis.length; i += chunkSize) {
+        const chunk = emojis.slice(i, i + chunkSize);
+        let resultText = `✨ <b><u>${esc(packName)}</u></b> (Part ${Math.floor(i / chunkSize) + 1})\n\n`;
+        const keyboard = [];
+
+        chunk.forEach((e, index) => {
+          const idx = i + index + 1;
+          const tgEmojiTag     = `<tg-emoji emoji-id="${e.id}">${e.emoji}</tg-emoji>`;
+          const btnCode        = `"icon_custom_emoji_id": "${e.id}"`;
+          const captionCode    = `<tg-emoji emoji-id="${e.id}">${e.emoji}</tg-emoji>`;
+          const captionCodeEsc = esc(captionCode);
+
+          resultText +=
+            `<blockquote>` +
+            `<b>${idx}. Custom Emoji</b>\n` +
+            `✨ <b>Premium Emoji:</b> ${tgEmojiTag}\n` +
+            `🆔 <b>ID:</b> <code>${e.id}</code>\n` +
+            `🔘 <b>Use in Button:</b> <code>${esc(btnCode)}</code>\n` +
+            `📝 <b>Use in Caption:</b> <code>${captionCodeEsc}</code>` +
+            `</blockquote>\n`;
+
+          keyboard.push([
+            { text: `${BTN_NAME_ID} #${idx}`,          copy_text: { text: e.id },        style: 'primary', icon_custom_emoji_id: e.id },
+            { text: `${BTN_NAME_BUTTON_CODE} #${idx}`,  copy_text: { text: btnCode },     style: 'success', icon_custom_emoji_id: e.id },
+            { text: `${BTN_NAME_CAPTION_CODE} #${idx}`, copy_text: { text: captionCode }, style: 'danger',  icon_custom_emoji_id: e.id },
+          ]);
+        });
+
+        await api.sendMessage({
+          chat_id: chatId,
+          parse_mode: 'HTML',
+          reply_markup: { inline_keyboard: keyboard },
+          text: resultText,
+        });
+      }
       return;
 
     } catch (e) {
