@@ -199,6 +199,7 @@ export default async function (message) {
     return;
   }
 
+  // ── Collect custom emoji entity IDs ────────────────────────────────────────
   const entities       = message.entities ?? [];
   const customEmojiIds = [];
 
@@ -206,6 +207,63 @@ export default async function (message) {
     if (entity.type === 'custom_emoji') {
       const id = entity.custom_emoji_id;
       if (id && !customEmojiIds.includes(id)) customEmojiIds.push(id);
+    }
+  }
+
+  // ── Handle Sticker Set Links ───────────────────────────────────────────────
+  const stickerSetMatch = text.match(/(?:t\.me\/addstickers\/|^\/?pack\s+)([\w_]+)/i);
+  if (stickerSetMatch && customEmojiIds.length === 0) {
+    const packName = stickerSetMatch[1];
+    try {
+      const set = await api.getStickerSet({ name: packName });
+      if (set.sticker_type !== 'custom_emoji') {
+        await api.sendMessage({
+          chat_id: chatId,
+          reply_to_message_id: replyToId,
+          text: `${EMOJI_CROSS} The pack <b>${esc(packName)}</b> is a regular sticker pack, not a Premium Custom Emoji pack.`,
+          parse_mode: 'HTML',
+        });
+        return;
+      }
+
+      const emojis = set.stickers.map(s => ({ id: s.custom_emoji_id, emoji: s.emoji ?? '❓' }));
+      if (emojis.length === 0) {
+        await api.sendMessage({ chat_id: chatId, text: `${EMOJI_CROSS} No custom emojis found in this pack.` });
+        return;
+      }
+
+      let docText = `✨ Premium Custom Emoji Pack: ${packName}\n📦 Total Emojis: ${emojis.length}\n\n`;
+      docText += `========================================\n\n`;
+      emojis.forEach((e, i) => {
+        docText += `${i + 1}. Emoji: ${e.emoji}\n`;
+        docText += `   ID: ${e.id}\n`;
+        docText += `   Button Code: "icon_custom_emoji_id": "${e.id}"\n`;
+        docText += `   Caption Code: <tg-emoji emoji-id="${e.id}">${e.emoji}</tg-emoji>\n\n`;
+      });
+
+      const fileBytes = new TextEncoder().encode(docText);
+      const file = new InputFile(fileBytes, `${packName}_emojis.txt`, { type: 'text/plain' });
+
+      await api.sendDocument({
+        chat_id: chatId,
+        document: file,
+        caption: 
+          `✨ <b>Pack:</b> <code>${esc(packName)}</code>\n` +
+          `📦 <b>Total Emojis:</b> ${emojis.length}\n\n` +
+          `<i>All IDs and codes are in the attached text file. For 1-tap copy buttons, just forward specific emojis to me!</i>`,
+        parse_mode: 'HTML',
+        reply_to_message_id: replyToId,
+      });
+      return;
+
+    } catch (e) {
+      await api.sendMessage({
+        chat_id: chatId,
+        reply_to_message_id: replyToId,
+        text: `${EMOJI_CROSS} Could not fetch the sticker pack. Please check if the link is valid.`,
+        parse_mode: 'HTML',
+      });
+      return;
     }
   }
 
