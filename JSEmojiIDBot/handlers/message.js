@@ -172,7 +172,8 @@ export default async function (message) {
         `📌 <b>What I can do:</b>\n` +
         `• Send any message with <b>Premium Custom Emojis</b>\n` +
         `• I'll extract each emoji's <b>ID</b>, <b>Button Code</b> &amp; <b>Caption Code</b>\n\n` +
-        `💡 <i>Just forward or type a message with custom emojis!</i>`,
+        `💡 <i>Just forward or type a message with custom emojis!</i>\n\n` +
+        `☁️ <i>Hosted on <a href="https://tgcloud.io">Telegram Serverless</a> • <a href="https://github.com/JSOrganizations/JSEmojiIDBot">Open Source</a></i>`,
     });
     return;
   }
